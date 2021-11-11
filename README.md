@@ -1,7 +1,7 @@
 # lodestone
 文档全文检索
 # 原始项目
-[lodestone](https://github.com/LodestoneHQ/lodestone)
+[https://github.com/LodestoneHQ/lodestone](https://github.com/LodestoneHQ/lodestone)
 # 改动
 原始项目已经几年不更新了，项目全部迁移到go mod模式，重写了backend，全部用gin实现
 # 运行
