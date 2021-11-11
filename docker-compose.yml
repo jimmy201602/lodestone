@@ -1,0 +1,151 @@
+###############################################################################
+# Default Docker Compose configuration
+###############################################################################
+# This is the default docker-compose configuration for Lodestone.
+# You can use it to have a working Lodestone setup out of the box
+#
+# Visit http://localhost/web to view the Lodestone dashboard
+
+version: '3.4'
+services:
+  elasticsearch:
+    image: webterminal/lodestone-elasticsearch:latest
+    environment:
+      #- bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - ./data/elasticsearch:/usr/share/elasticsearch/data
+    ports:
+      - 9200:9200
+
+  document_processor:
+    image: webterminal/lodestone-document:latest
+    volumes:
+      - ./data/storage/tmp:/tmp
+    depends_on:
+      - elasticsearch
+      - rabbitmq
+      - webapp
+      - tika
+    restart: on-failure
+    command:
+    - /lodestone-document-processor
+    - start
+    - --amqp-url=amqp://lodestone:lodestone@rabbitmq:5672
+    - --api-endpoint=http://webapp:3001
+    - --tika-endpoint=http://tika:9998
+    - --elasticsearch-endpoint=http://elasticsearch:9200
+
+  thumbnail_processor:
+    image: webterminal/lodestone-thumbnail:latest
+    depends_on:
+      - rabbitmq
+      - webapp
+    restart: on-failure
+    command:
+    - /usr/bin/lodestone-thumbnail-processor
+    - start
+    - --amqp-url=amqp://lodestone:lodestone@rabbitmq:5672
+    - --api-endpoint=http://webapp:3001
+
+  webapp:
+    image: webterminal/lodestone-backend:latest
+    depends_on:
+      - elasticsearch
+      - storage
+      - rabbitmq
+    ports:
+      - 80:3001
+    restart: on-failure
+    command:
+      - /lodestone/httserver
+      - start
+      - --minio-api-endpoint=storage:9000
+      - --minio-root-user=minio
+      - --minio-root-password=minio123
+      - --elasticsearch-endpoint=http://elasticsearch:9200
+      - --amqp-api-endpoint=http://lodestone:lodestone@rabbitmq:15672/api/queues
+      - --amqp-url=amqp://lodestone:lodestone@rabbitmq:5672
+      - --amqp-exchange=lodestone
+      - --amqp-queue=errors
+      - --elasticsearch-index=lodestone
+
+  fs_publisher:
+    image: webterminal/lodestone-fs-publisher:latest
+    depends_on:
+      - rabbitmq
+    command:
+    - /lodestone-fs-publisher
+    - start
+    - --amqp-url=amqp://lodestone:lodestone@rabbitmq:5672
+    - --dir=/data
+    - --bucket=documents
+    restart: on-failure
+    volumes:
+    - ./data/storage/documents:/data
+
+  # E-mail publisher is currently WIP.
+  # email_publisher:
+    # image: lodestonehq/lodestone-email-publisher:latest
+    # depends_on:
+    #   rabbitmq:
+    #     condition: service_healthy
+    #   webapp:
+    #     condition: service_healthy
+    # command:
+    # - /lodestone-email-publisher
+    # - start
+    # - --amqp-url=amqp://lodestone:lodestone@rabbitmq:5672
+    # - --api-endpoint=http://webapp:3000
+    # - --bucket=documents
+    # - --imap-hostname=imap.gmail.com
+    # - --imap-username=xxxx@gmail.com
+    # - --imap-password=xxxxxxxxxxxxxx
+
+  storage:
+    image: minio/minio:latest
+    depends_on:
+      - rabbitmq
+    volumes:
+    - ./data/storage:/data
+    command: minio server --console-address :9001 /data
+    environment:
+    # - MINIO_BROWSER=off
+    - MINIO_ROOT_USER=minio
+    - MINIO_ROOT_PASSWORD=minio123
+    - MINIO_NOTIFY_AMQP_ENABLE=on
+    - MINIO_NOTIFY_AMQP_URL=amqp://lodestone:lodestone@rabbitmq:5672
+    - MINIO_NOTIFY_AMQP_EXCHANGE=lodestone
+    - MINIO_NOTIFY_AMQP_EXCHANGE_TYPE=fanout
+    - MINIO_NOTIFY_AMQP_ROUTING_KEY=storagelogs
+    - MINIO_NOTIFY_AMQP_MANDATORY=off
+    - MINIO_NOTIFY_AMQP_AUTO_DELETED=off
+    - MINIO_NOTIFY_AMQP_DELIVERY_MODE=0
+    healthcheck:
+      test: ["CMD", "curl", "--silent", "-f", "http://localhost:9000/minio/health/ready"]
+      interval: 5s
+      timeout: 25s
+      retries: 5
+      start_period: 2s
+    ports:
+      - 9000:9000
+      - 9001:9001
+
+  rabbitmq:
+    image: webterminal/lodestone-rabbitmq:latest
+    ports:
+      - 5672:5672
+      - 15672:15672
+    environment:
+      - RABBITMQ_DEFAULT_USER=lodestone
+      - RABBITMQ_DEFAULT_PASS=lodestone
+
+  tika:
+    image: apache/tika:latest-full
+    ports:
+      - 9998:9998
+
