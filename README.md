@@ -17,5 +17,10 @@ docker-compose up
 目前已经实现常见的文档进行全文检索，图片ocr识别
 # 预览图
 ![Dashboard](dashboard.png)
+![Dashboard1](dashboard1.png)
+![Dashboard2](dashboard2.png)
+![Dashboard3](dashboard3.png)
+![Dashboard4](dashboard4.png)
+![Dashboard5](dashboard5.png)
 # 代码何时开源
 代码刚整理好，好多功能未进行详细测试，整理，待完成后进行代码上传
